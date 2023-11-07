@@ -97,7 +97,11 @@ camera_fb_t *capturePic()
 void blink()
 {
     analogWrite(flashPin, 1);
-    delay(20);
+    delay(10);
+    analogWrite(flashPin, 0);
+    delay(10);
+    analogWrite(flashPin, 1);
+    delay(300);
     analogWrite(flashPin, 0);
 }
 
@@ -204,7 +208,6 @@ void setup()
 void loop()
 {
     t++;
-    // Serial.printf("hello: %d\n", t);
     if (Serial.available() > 0)
     {
         char receivedChar = Serial.read();
@@ -227,6 +230,11 @@ void loop()
     if (continuousTracking)
     {
         trackEye();
+    }
+    else
+    {
+        Serial.printf("hello: %d\n", t);
+        blink();
     }
     //blink();
     //delay(10);
