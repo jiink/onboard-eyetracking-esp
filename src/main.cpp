@@ -95,19 +95,37 @@ camera_fb_t* capturePic()
 
 void blink()
 {
-    digitalWrite(flashPin, HIGH);
-    delay(5);
-    digitalWrite(flashPin, LOW);
+    analogWrite(flashPin, 1);
+    delay(100);
+    analogWrite(flashPin, 0);
 }
 
 void trackEye()
 {
     //capturePic();
     camera_fb_t* camFrameBuffer = capturePic();
+    // First find lowest and highest pixel values
+    uint8_t lowest = 255;
+    uint8_t highest = 0;
+    for (int i = 0; i < camFrameBuffer->len; i++)
+    {
+        uint8_t pixel = camFrameBuffer->buf[i];
+        if (pixel < lowest)
+        {
+            lowest = pixel;
+        }
+        if (pixel > highest)
+        {
+            highest = pixel;
+        }
+    }
+
     // Threshold image and send it
     for (int i = 0; i < camFrameBuffer->len; i++)
     {
         uint8_t pixel = camFrameBuffer->buf[i];
+        // brightness is a proportion of the highest value
+        uint8_t brightness = (pixel * 255) / highest;
         bool white = pixel > threshold ? 1 : 0;
         // Set the bit in the respective byte
         int byteIndex = i / 8;
@@ -150,5 +168,5 @@ void loop()
     Serial.printf("hello: %d\n", t);
     trackEye();
     blink();
-    delay(1000);
+    delay(900);
 }
