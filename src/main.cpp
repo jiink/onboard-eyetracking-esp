@@ -22,6 +22,10 @@
 #define LED_OFF HIGH //
 #define LAMP_PIN 4   // LED FloodLamp.
 
+#define THRESHOLD_BUFFER_W 96
+#define THRESHOLD_BUFFER_H 96
+#define THRESHOLD_BUFFER_LEN ((THRESHOLD_BUFFER_W * THRESHOLD_BUFFER_H) / 8)
+
 camera_config_t camConfig = {
     .pin_pwdn = PWDN_GPIO_NUM,
     .pin_reset = RESET_GPIO_NUM,
@@ -52,6 +56,10 @@ camera_config_t camConfig = {
 
 int flashPin = 4;
 int t = 0;
+uint8_t threshold = 128;
+// For storing the thesholded image.
+// 1 bit per pixel. Each byte is 8 pixels wide.
+uint8_t thresholdBuffer[THRESHOLD_BUFFER_LEN];
 
 void errorLoop()
 {
@@ -59,31 +67,63 @@ void errorLoop()
     delay(500);
 }
 
-void captureAndSendPic()
+void printBuffer(uint8_t* buf, size_t len)
+{
+    Serial.printf("\n\nSending %d bytes of image data\n", len);
+    for (int i = 0; i < len; i++)
+    {
+        Serial.printf("%02x ", buf[i]);
+    }
+    Serial.println();
+}
+
+camera_fb_t* capturePic()
 {
     //capture a frame
     camera_fb_t* fb = esp_camera_fb_get();
     if (!fb) {
-        Serial.println("Frame buffer could not be acquired");
+        Serial.println("THERE IS NO FRAME BUFFER?");
     }
 
     Serial.printf("Img info: len: %d w/h: %d %d time: %d format: %u\n\n", fb->len, fb->width, fb->height, fb->timestamp.tv_usec, fb->format);
+    //printBuffer(fb->buf, fb->len);
+    //esp_camera_fb_return(fb);
+    
 
-    for (int i = 0; i < fb->len; i++)
-    {
-        Serial.printf("%02x ", fb->buf[i]);
-    }
-    Serial.println();
-
-    //return the frame buffer back to be reused
-    esp_camera_fb_return(fb);
+    return fb;
 }
 
 void blink()
 {
     digitalWrite(flashPin, HIGH);
-    delay(20);
+    delay(5);
     digitalWrite(flashPin, LOW);
+}
+
+void trackEye()
+{
+    //capturePic();
+    camera_fb_t* camFrameBuffer = capturePic();
+    // Threshold image and send it
+    for (int i = 0; i < camFrameBuffer->len; i++)
+    {
+        uint8_t pixel = camFrameBuffer->buf[i];
+        bool white = pixel > threshold ? 1 : 0;
+        // Set the bit in the respective byte
+        int byteIndex = i / 8;
+        int bitIndex = i % 8;
+        if (white)
+        {
+            thresholdBuffer[byteIndex] |= (1 << (7-bitIndex));
+        } else {
+            thresholdBuffer[byteIndex] &= ~(1 << (7-bitIndex));
+        }
+    }
+    Serial.printf("Sending 1 bit per pix %ux%u img\n", THRESHOLD_BUFFER_W, THRESHOLD_BUFFER_H);
+    printBuffer(thresholdBuffer, THRESHOLD_BUFFER_LEN);
+
+    // Done with the camera image, so return the frame buffer back to be reused
+    esp_camera_fb_return(camFrameBuffer);
 }
 
 void setupCam() {
@@ -108,7 +148,7 @@ void loop()
 {
     t++;
     Serial.printf("hello: %d\n", t);
-    captureAndSendPic();
+    trackEye();
     blink();
     delay(1000);
 }
