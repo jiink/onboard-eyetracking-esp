@@ -79,10 +79,14 @@ void captureAndSendPic()
     esp_camera_fb_return(fb);
 }
 
-void setup()
+void blink()
 {
-    pinMode(flashPin, OUTPUT);
-    Serial.begin(115200);
+    digitalWrite(flashPin, HIGH);
+    delay(20);
+    digitalWrite(flashPin, LOW);
+}
+
+void setupCam() {
     esp_err_t err = esp_camera_init(&camConfig);
     if (err != ESP_OK)
     {
@@ -93,15 +97,18 @@ void setup()
     Serial.println("Camera init succeeded");
 }
 
+void setup()
+{
+    pinMode(flashPin, OUTPUT);
+    Serial.begin(115200);
+    setupCam();
+}
+
 void loop()
 {
-    t = (t + 1) % 999;
-    char message[100];
-    sprintf(message, "hello: %d", t);
-    Serial.println(message);
-    digitalWrite(flashPin, HIGH);
-    delay(1);
-    digitalWrite(flashPin, LOW);
-    delay(1000);
+    t++;
+    Serial.printf("hello: %d\n", t);
     captureAndSendPic();
+    blink();
+    delay(1000);
 }
