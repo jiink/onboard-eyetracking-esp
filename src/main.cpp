@@ -56,7 +56,7 @@ camera_config_t camConfig = {
 
 int flashPin = 4;
 int t = 0;
-uint8_t threshold = 128;
+float thresholdProportion = 0.1f; // 0.0 to 1.0
 // For storing the thesholded image.
 // 1 bit per pixel. Each byte is 8 pixels wide.
 uint8_t thresholdBuffer[THRESHOLD_BUFFER_LEN];
@@ -96,15 +96,15 @@ camera_fb_t* capturePic()
 void blink()
 {
     analogWrite(flashPin, 1);
-    delay(100);
+    delay(20);
     analogWrite(flashPin, 0);
 }
 
 void trackEye()
 {
+    Serial.println("BEGIN!");
     //capturePic();
     camera_fb_t* camFrameBuffer = capturePic();
-    // First find lowest and highest pixel values
     uint8_t lowest = 255;
     uint8_t highest = 0;
     for (int i = 0; i < camFrameBuffer->len; i++)
@@ -119,13 +119,13 @@ void trackEye()
             highest = pixel;
         }
     }
-
+    uint8_t threshold = (uint8_t)(thresholdProportion * (highest - lowest) + lowest);
+    Serial.printf("Lowest: %u Highest: %u Threshold: %u\n", lowest, highest, threshold);
     // Threshold image and send it
     for (int i = 0; i < camFrameBuffer->len; i++)
     {
         uint8_t pixel = camFrameBuffer->buf[i];
-        // brightness is a proportion of the highest value
-        uint8_t brightness = (pixel * 255) / highest;
+        
         bool white = pixel > threshold ? 1 : 0;
         // Set the bit in the respective byte
         int byteIndex = i / 8;
@@ -137,9 +137,13 @@ void trackEye()
             thresholdBuffer[byteIndex] &= ~(1 << (7-bitIndex));
         }
     }
+    Serial.printf("Sending 1 byte per pix\n");
+    printBuffer(camFrameBuffer->buf, camFrameBuffer->len);
+
     Serial.printf("Sending 1 bit per pix %ux%u img\n", THRESHOLD_BUFFER_W, THRESHOLD_BUFFER_H);
     printBuffer(thresholdBuffer, THRESHOLD_BUFFER_LEN);
 
+    Serial.println("DONE!");
     // Done with the camera image, so return the frame buffer back to be reused
     esp_camera_fb_return(camFrameBuffer);
 }
@@ -165,8 +169,14 @@ void setup()
 void loop()
 {
     t++;
-    Serial.printf("hello: %d\n", t);
-    trackEye();
+    //Serial.printf("hello: %d\n", t);
+    if (Serial.available() > 0) {
+        char receivedChar = Serial.read();
+        Serial.println(">>>> GOT A CHAR!");
+        analogWrite(flashPin, 6);
+        trackEye();
+        analogWrite(flashPin, 0);
+    }
     blink();
-    delay(900);
+    delay(10);
 }
