@@ -26,7 +26,7 @@ for y in range(height):
 print(f"Lowest pixel value: {lowest}")
 print(f"Highest pixel value: {highest}")
 
-thresholdedImage = Image.new('L', (width, height))
+thresholdedImage = Image.new('RGB', (width, height))
 thresholdedPix = thresholdedImage.load()
 thresholdProportion = 0.1
 threshold = thresholdProportion * (highest - lowest) + lowest
@@ -35,9 +35,27 @@ for y in range(height):
     for x in range(width):
         pixel_value = image.getpixel((x, y))
         if pixel_value < threshold:
-            thresholdedPix[x, y] = 0
+            thresholdedPix[x, y] = (0, 0, 0)
         else:
-            thresholdedPix[x, y] = 255
+            thresholdedPix[x, y] = (255, 255, 255)
+
+
+# Find average location of black pixels
+xSum = 0
+ySum = 0
+blackPixelCount = 0
+for y in range(height):
+    for x in range(width):
+        pixel_value = thresholdedPix[x, y]
+        if pixel_value == (0, 0, 0):
+            xSum += x
+            ySum += y
+            blackPixelCount += 1
+xAvg = xSum / blackPixelCount
+yAvg = ySum / blackPixelCount
+print(f"Average location of black pixels: ({xAvg}, {yAvg})")
+thresholdedPix[round(xAvg), round(yAvg)] = (255, 0, 0)
+thresholdedPix[0, 0] = (0, 0, 255)
 
 # Close the image file
 image.close()

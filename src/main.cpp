@@ -26,6 +26,13 @@
 #define THRESHOLD_BUFFER_H 96
 #define THRESHOLD_BUFFER_LEN ((THRESHOLD_BUFFER_W * THRESHOLD_BUFFER_H) / 8)
 
+typedef struct eyeCal {
+    int minX;
+    int maxX;
+    int minY;
+    int maxY;
+} eyeCal;
+
 camera_config_t camConfig = {
     .pin_pwdn = PWDN_GPIO_NUM,
     .pin_reset = RESET_GPIO_NUM,
@@ -57,6 +64,8 @@ camera_config_t camConfig = {
 int flashPin = 4;
 int t = 0;
 bool continuousTracking = false;
+eyeCal calibration = {0, THRESHOLD_BUFFER_W, 0, THRESHOLD_BUFFER_H};
+bool calibrating = false;
 float thresholdProportion = 0.1f; // 0.0 to 1.0
 // For storing the thesholded image.
 // 1 bit per pixel. Each byte is 8 pixels wide.
@@ -128,6 +137,8 @@ void trackEye()
     if (!continuousTracking)
     {
         Serial.printf("Lowest: %u Highest: %u Threshold: %u\n", lowest, highest, threshold);
+        Serial.printf("Sending 1 byte per pix\n");
+        printBuffer(camFrameBuffer->buf, camFrameBuffer->len);
     }
     // Threshold image and send it
     for (int i = 0; i < camFrameBuffer->len; i++)
@@ -173,9 +184,6 @@ void trackEye()
     Serial.print(",");
     Serial.print("Y_Location:");
     Serial.println(yAvg);
-
-    // Serial.printf("Sending 1 byte per pix\n");
-    // printBuffer(camFrameBuffer->buf, camFrameBuffer->len);
 
     // Serial.printf("Sending 1 bit per pix %ux%u img\n", THRESHOLD_BUFFER_W, THRESHOLD_BUFFER_H);
     // printBuffer(thresholdBuffer, THRESHOLD_BUFFER_LEN);
@@ -225,6 +233,8 @@ void loop()
         case 's': // s for STOP
             continuousTracking = false;
             break;
+        case 'c': // c for CALIBRATE
+
         }
     }
     if (continuousTracking)
