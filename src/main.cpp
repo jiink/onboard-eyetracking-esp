@@ -1,6 +1,9 @@
 #include <Arduino.h>
 #include <esp_camera.h>
 
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+
 #define PWDN_GPIO_NUM 32
 #define RESET_GPIO_NUM -1
 #define XCLK_GPIO_NUM 0
@@ -26,7 +29,8 @@
 #define THRESHOLD_BUFFER_H 96
 #define THRESHOLD_BUFFER_LEN ((THRESHOLD_BUFFER_W * THRESHOLD_BUFFER_H) / 8)
 
-typedef struct eyeCal {
+typedef struct eyeCal
+{
     int minX;
     int maxX;
     int minY;
@@ -64,6 +68,7 @@ camera_config_t camConfig = {
 int flashPin = 4;
 int t = 0;
 bool continuousTracking = false;
+bool sendPhotos = false;
 eyeCal calibration = {0, THRESHOLD_BUFFER_W, 0, THRESHOLD_BUFFER_H};
 bool calibrating = false;
 float thresholdProportion = 0.1f; // 0.0 to 1.0
@@ -96,9 +101,9 @@ camera_fb_t *capturePic()
         Serial.println("THERE IS NO FRAME BUFFER?");
     }
 
-    //Serial.printf("Img info: len: %d w/h: %d %d time: %d format: %u\n\n", fb->len, fb->width, fb->height, fb->timestamp.tv_usec, fb->format);
-    // printBuffer(fb->buf, fb->len);
-    // esp_camera_fb_return(fb);
+    // Serial.printf("Img info: len: %d w/h: %d %d time: %d format: %u\n\n", fb->len, fb->width, fb->height, fb->timestamp.tv_usec, fb->format);
+    //  printBuffer(fb->buf, fb->len);
+    //  esp_camera_fb_return(fb);
 
     return fb;
 }
@@ -116,11 +121,16 @@ void blink()
 
 void trackEye()
 {
-    //Serial.println("BEGIN!");
-    // capturePic();
+    // Serial.println("BEGIN!");
+    //  capturePic();
+    int timeBefore = millis();
     camera_fb_t *camFrameBuffer = capturePic();
-    uint8_t lowest = 255;
-    uint8_t highest = 0;
+    static uint8_t lowest = 255;
+    static uint8_t highest = 0;
+    uint8_t threshold = (uint8_t)(thresholdProportion * (highest - lowest) + lowest);
+    int xSum = 0;
+    int ySum = 0;
+    int numBlackPixels = 0;
     for (int i = 0; i < camFrameBuffer->len; i++)
     {
         uint8_t pixel = camFrameBuffer->buf[i];
@@ -132,64 +142,69 @@ void trackEye()
         {
             highest = pixel;
         }
-    }
-    uint8_t threshold = (uint8_t)(thresholdProportion * (highest - lowest) + lowest);
-    if (!continuousTracking)
-    {
-        Serial.printf("Lowest: %u Highest: %u Threshold: %u\n", lowest, highest, threshold);
-        Serial.printf("Sending 1 byte per pix\n");
-        printBuffer(camFrameBuffer->buf, camFrameBuffer->len);
-    }
-    // Threshold image and send it
-    for (int i = 0; i < camFrameBuffer->len; i++)
-    {
-        uint8_t pixel = camFrameBuffer->buf[i];
-
         bool white = pixel > threshold ? 1 : 0;
-        // Set the bit in the respective byte
-        int byteIndex = i / 8;
-        int bitIndex = i % 8;
-        if (white)
+        if (sendPhotos)
         {
-            thresholdBuffer[byteIndex] |= (1 << (7 - bitIndex));
-        }
-        else
-        {
-            thresholdBuffer[byteIndex] &= ~(1 << (7 - bitIndex));
-        }
-    }
-    // Find average location of black pixels
-    int xSum = 0;
-    int ySum = 0;
-    int numBlackPixels = 0;
-    for (int y = 0; y < THRESHOLD_BUFFER_H; y++)
-    {
-        for (int x = 0; x < THRESHOLD_BUFFER_W; x++)
-        {
-            int byteIndex = (y * THRESHOLD_BUFFER_W + x) / 8;
-            int bitIndex = (y * THRESHOLD_BUFFER_W + x) % 8;
-            bool black = (thresholdBuffer[byteIndex] & (1 << (7 - bitIndex))) == 0;
-            if (black)
+            // Set the bit in the respective byte
+            int byteIndex = i / 8;
+            int bitIndex = i % 8;
+            if (white)
             {
-                xSum += x;
-                ySum += y;
-                numBlackPixels++;
+                thresholdBuffer[byteIndex] |= (1 << (7 - bitIndex));
+            }
+            else
+            {
+                thresholdBuffer[byteIndex] &= ~(1 << (7 - bitIndex));
             }
         }
+        if (!white) // this black pixel is potentially part of the pupil.
+        {
+            int x = i % THRESHOLD_BUFFER_W;
+            int y = i / THRESHOLD_BUFFER_W;
+            xSum += x;
+            ySum += y;
+            numBlackPixels++;
+        }
     }
-    int xAvg = xSum / numBlackPixels;
-    int yAvg = ySum / numBlackPixels;
-    Serial.print("X_Location:");
+    int xAvg = 0;
+    int yAvg = 0;
+    if (numBlackPixels != 0)
+    {
+        xAvg = xSum / numBlackPixels;
+        yAvg = ySum / numBlackPixels;
+    }
+    int timeAfter = millis();
+    if (calibrating)
+    {
+        calibration.minX = MIN(calibration.minX, xAvg);
+        calibration.maxX = MAX(calibration.maxX, xAvg);
+        calibration.minY = MIN(calibration.minY, yAvg);
+        calibration.maxY = MAX(calibration.maxY, yAvg);
+    }
+    Serial.print("X:");
     Serial.print(xAvg);
     Serial.print(",");
-    Serial.print("Y_Location:");
-    Serial.println(yAvg);
+    Serial.print("Y:");
+    Serial.print(yAvg);
+    Serial.print(",");
+    Serial.print("ms:");
+    Serial.println(timeAfter - timeBefore);
 
-    // Serial.printf("Sending 1 bit per pix %ux%u img\n", THRESHOLD_BUFFER_W, THRESHOLD_BUFFER_H);
-    // printBuffer(thresholdBuffer, THRESHOLD_BUFFER_LEN);
+    if (!continuousTracking)
+    {
+        Serial.printf("Lowest: %u Highest: %u Threshold: %u NumBlack: %d\n", lowest, highest, threshold, numBlackPixels);
+        
+    }
+    if (sendPhotos)
+    {
+        Serial.printf("Sending 1 byte per pix\n");
+        printBuffer(camFrameBuffer->buf, camFrameBuffer->len);
+        Serial.printf("Sending 1 bit per pix %ux%u img\n", THRESHOLD_BUFFER_W, THRESHOLD_BUFFER_H);
+        printBuffer(thresholdBuffer, THRESHOLD_BUFFER_LEN);
+    }
 
-    //Serial.println("DONE!");
-    // Done with the camera image, so return the frame buffer back to be reused
+    // Serial.println("DONE!");
+    //  Done with the camera image, so return the frame buffer back to be reused
     esp_camera_fb_return(camFrameBuffer);
 }
 
@@ -222,10 +237,8 @@ void loop()
         Serial.println(">>>> GOT A CHAR!");
         switch (receivedChar)
         {
-        case 'p':
-            analogWrite(flashPin, 6);
+        case 'f': // f for FRAME
             trackEye();
-            analogWrite(flashPin, 0);
             break;
         case 'g': // g for GO
             continuousTracking = true;
@@ -234,8 +247,29 @@ void loop()
             continuousTracking = false;
             break;
         case 'c': // c for CALIBRATE
-
+            if (calibrating)
+            {
+                calibrating = false;
+                Serial.printf("CAL DONE\nMIN/MAX_X:%d-%d\nMIN/MAX_Y:%d-%d\n", calibration.minX, calibration.maxX, calibration.minY, calibration.maxY);
+            } else {
+                calibrating = true;
+                calibration.minX = THRESHOLD_BUFFER_W;
+                calibration.maxX = 0;
+                calibration.minY = THRESHOLD_BUFFER_H;
+                calibration.maxY = 0;
+                Serial.println("CAL STARTED");
+            }
+            
+            break;
+        case 'p': // p for PHOTO
+            sendPhotos = true;
+            trackEye();
+            sendPhotos = false;
+            break;
+        default:
+            break;
         }
+        
     }
     if (continuousTracking)
     {
@@ -246,6 +280,6 @@ void loop()
         Serial.printf("hello: %d\n", t);
         blink();
     }
-    //blink();
-    //delay(10);
+    // blink();
+    // delay(10);
 }

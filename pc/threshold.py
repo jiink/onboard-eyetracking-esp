@@ -1,7 +1,7 @@
 from PIL import Image
 
 # Open the PNG image
-image = Image.open('eye.png')
+image = Image.open('in.png')
 
 # Check if the image is grayscale (L mode)
 if image.mode != 'L':
@@ -25,7 +25,6 @@ for y in range(height):
 
 print(f"Lowest pixel value: {lowest}")
 print(f"Highest pixel value: {highest}")
-
 thresholdedImage = Image.new('RGB', (width, height))
 thresholdedPix = thresholdedImage.load()
 thresholdProportion = 0.1
@@ -53,11 +52,12 @@ for y in range(height):
             blackPixelCount += 1
 xAvg = xSum / blackPixelCount
 yAvg = ySum / blackPixelCount
+print(f"Number of black pixels: {blackPixelCount}")
 print(f"Average location of black pixels: ({xAvg}, {yAvg})")
 thresholdedPix[round(xAvg), round(yAvg)] = (255, 0, 0)
 thresholdedPix[0, 0] = (0, 0, 255)
 
 # Close the image file
 image.close()
-thresholdedImage.save('eye_thresholded.png')
+thresholdedImage.save('thresholded.png')
 thresholdedImage.close()
