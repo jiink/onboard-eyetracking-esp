@@ -1,7 +1,7 @@
 from PIL import Image
 
 # Open the PNG image
-image = Image.open('in.png')
+image = Image.open('in.png').convert('L')
 
 # Check if the image is grayscale (L mode)
 if image.mode != 'L':
