@@ -32,8 +32,8 @@
 typedef struct eyeCal
 {
     int minX;
-    int maxX;
     int minY;
+    int maxX;
     int maxY;
 } eyeCal;
 
@@ -69,7 +69,7 @@ int flashPin = 4;
 int t = 0;
 bool continuousTracking = false;
 bool sendPhotos = false;
-eyeCal calibration = {0, THRESHOLD_BUFFER_W, 0, THRESHOLD_BUFFER_H};
+eyeCal calibration = {0, 0, THRESHOLD_BUFFER_W, THRESHOLD_BUFFER_H};
 bool calibrating = false;
 float thresholdProportion = 0.1f; // 0.0 to 1.0
 // For storing the thesholded image.

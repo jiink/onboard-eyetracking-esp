@@ -10,6 +10,12 @@
 #define BUFFER_H 96
 #define MAX_BLOBS 100
 
+typedef struct vec2f
+{
+    float x;
+    float y;
+} vec2f;
+
 typedef struct vec2i
 {
     int x;
@@ -24,6 +30,15 @@ typedef struct blob
     int maxY;
 } blob;
 
+typedef struct eyeCal
+{
+    int minX;
+    int maxX;
+    int minY;
+    int maxY;
+} eyeCal;
+
+eyeCal calibration = {0, BUFFER_W, 0, BUFFER_H};
 blob blobs[MAX_BLOBS];
 unsigned int numBlobs = 0;
 
@@ -186,6 +201,32 @@ vec2i findPupil(uint8_t *buf, int len)
     return getBlobClosestToPoint(BUFFER_W / 2, BUFFER_H / 2);
 }
 
+float normalize(int number, int min, int max) {
+    if (min == max) {
+        return 0.0;
+    }
+
+    // Calculate the normalized value
+    float normalized = (2.0 * (number - min) / (max - min)) - 1.0;
+
+    // Ensure the result is within the valid range [-1, 1]
+    if (normalized < -1.0) {
+        return -1.0;
+    } else if (normalized > 1.0) {
+        return 1.0;
+    } else {
+        return normalized;
+    }
+}
+
+vec2f normalizePupilCoords(vec2i pixelCoords, eyeCal calibration)
+{
+    vec2f result;
+    result.x = normalize(pixelCoords.x, calibration.minX, calibration.maxX);
+    result.y = normalize(pixelCoords.y, calibration.minY, calibration.maxY);
+    return result;
+}
+
 int main()
 {
     printf("Hello World\n");
@@ -207,6 +248,8 @@ int main()
     vec2i result = findPupil(buffer, BUFFER_W * BUFFER_H);
     printf("Pupil is at %d, %d\n", result.x, result.y);
     printf("%d blobs found\n", numBlobs);
+    printf("Calibration: (%d, %d) to (%d, %d)\n", calibration.minX, calibration.minY, calibration.maxX, calibration.maxY);
+    printf("Normalized pupil: (%.02f, %.02f)\n", normalizePupilCoords(result, calibration).x, normalizePupilCoords(result, calibration).y);
     
     printAllBlobs();
     printAllBlobsToFile("blobs.txt", result);
