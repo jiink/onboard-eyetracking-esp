@@ -105,8 +105,6 @@ void printAllBlobs()
     }
 }
 
-#include <stdio.h>
-
 void printAllBlobsToFile(const char* filename, vec2i pupil)
 {
     FILE *file = fopen(filename, "w");
@@ -133,6 +131,13 @@ vec2i getBlobClosestToPoint(int px, int py)
     for (int i = 0; i < numBlobs; i++)
     {
         blob *b = &blobs[i];
+        // Do not consider ones that are too small
+        int blobSize = (b->maxX - b->minX) * (b->maxY - b->minY);
+        int minBlobSize = 10; // in number of pixels in the rectangle
+        if (blobSize <= minBlobSize)
+        {
+            continue;
+        }
         int centerx = (b->minX + b->maxX) / 2;
         int centery = (b->minY + b->maxY) / 2;
         int distanceSq = (centerx - px) * (centerx - px) + (centery - py) * (centery - py);
