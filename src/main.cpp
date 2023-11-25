@@ -1,5 +1,9 @@
 #include <Arduino.h>
 #include <esp_camera.h>
+#include <ArduinoOSCWiFi.h>
+#include <Wire.h>
+#include "WiFi.h"
+#include "AsyncUDP.h"
 
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
@@ -106,6 +110,12 @@ unsigned int rollingAvgPupilPosBufIndex = 0;
 // 1 bit per pixel. Each byte is 8 pixels wide.
 uint8_t thresholdBuffer[THRESHOLD_BUFFER_LEN];
 
+const char * ssid = "WIFI NAME";
+const char * password = "PASSWORD";
+IPAddress broadcastIp(192, 255, 255, 255);
+AsyncUDP udp;
+OscWiFiClient  client;
+
 int rectDistSq(int minX, int minY, int maxX, int maxY, int px, int py)
 {
     int dx = MAX(minX - px, MAX(px - maxX, 0));
@@ -116,6 +126,9 @@ int rectDistSq(int minX, int minY, int maxX, int maxY, int px, int py)
 void errorLoop()
 {
     Serial.printf("Unrecoverable! ");
+    analogWrite(flashPin, 5);
+    delay(500);
+    analogWrite(flashPin, 0);
     delay(500);
 }
 
@@ -339,6 +352,11 @@ vec2f normalizePupilCoords(vec2i pixelCoords, eyeCal calibration)
     return result;
 }
 
+// For sending to VRC over OSC
+float normToEyeDeg(float norm) {
+    return norm * 16.0f;
+}
+
 void trackEye()
 {
     // Serial.println("BEGIN!");
@@ -360,7 +378,7 @@ void trackEye()
         calibration.maxY = MAX(calibration.maxY, pupilPosPix.y);
     }
     Serial.printf("X:%.02f,Y:%.02f,ms:%d %d %d\n", pupilPosNorm.x, pupilPosNorm.y, timeAfter - timeBefore, timeAfterCapturePic - timeBeforeCapturePic, timeAfterFindPupil - timeBeforeFindPupil);
-
+    client.send("192.168.50.219", 9000, "/tracking/eye/LeftRightPitchYaw", normToEyeDeg(pupilPosNorm.y), normToEyeDeg(pupilPosNorm.x), normToEyeDeg(pupilPosNorm.y), normToEyeDeg(pupilPosNorm.x));
     if (!continuousTracking)
     {
         Serial.printf("Lowest: %u Highest: %u\n", prevLowestPixVal, prevHighestPixVal);
@@ -400,6 +418,18 @@ void setup()
     Serial.begin(115200);
     setupCam();
     analogWrite(flashPin, 1);
+    WiFi.mode(WIFI_STA);
+    Serial.print("Connecting to WiFi ..");
+
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(10);
+    }
+    if (WiFi.waitForConnectResult() != WL_CONNECTED) {
+        Serial.println("WiFi Failed");
+        errorLoop();
+    }
 }
 
 void loop()
