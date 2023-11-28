@@ -5,8 +5,10 @@
 #include "WiFi.h"
 #include "AsyncUDP.h"
 
-#define MAX(a,b) ((a) > (b) ? (a) : (b))
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+#define WIFI_ENABLE 1
 
 #define PWDN_GPIO_NUM 32
 #define RESET_GPIO_NUM -1
@@ -24,10 +26,10 @@
 #define VSYNC_GPIO_NUM 25
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
-#define LED_PIN 33   // Status led
-#define LED_ON LOW   // - Pin is inverted.
-#define LED_OFF HIGH //
-#define LAMP_PIN 4   // LED FloodLamp.
+#define LED_PIN 33    // Status led
+#define LED_ON LOW    // - Pin is inverted.
+#define LED_OFF HIGH  //
+#define LAMP_PIN 4    // LED FloodLamp.
 
 #define THRESHOLD_BUFFER_W 96
 #define THRESHOLD_BUFFER_H 96
@@ -114,7 +116,7 @@ const char * ssid = "WIFI NAME";
 const char * password = "PASSWORD";
 IPAddress broadcastIp(192, 255, 255, 255);
 AsyncUDP udp;
-OscWiFiClient  client;
+OscWiFiClient client;
 
 int rectDistSq(int minX, int minY, int maxX, int maxY, int px, int py)
 {
@@ -250,8 +252,8 @@ vec2i getBlobPosClosestToPoint(int px, int py)
     }
     if (closestBlobIndex == -1)
     {
-        //printf("Error: no blobs found\n");
-        return (vec2i){THRESHOLD_BUFFER_W/2, THRESHOLD_BUFFER_H/2};
+        // printf("Error: no blobs found\n");
+        return (vec2i){THRESHOLD_BUFFER_W / 2, THRESHOLD_BUFFER_H / 2};
     }
     blob *b = &blobs[closestBlobIndex];
     int centerx = (b->minX + b->maxX) / 2;
@@ -301,16 +303,18 @@ vec2i findPupil(uint8_t *buf, int len)
             numBlackPixels++;
         }
     }
-    //printf("%d black pixels found\n", numBlackPixels);
-    //printf("Lowest: %d, highest: %d, threshold: %d\n", prevLowestPixVal, prevHighestPixVal, threshold);
+    // printf("%d black pixels found\n", numBlackPixels);
+    // printf("Lowest: %d, highest: %d, threshold: %d\n", prevLowestPixVal, prevHighestPixVal, threshold);
     prevLowestPixVal = lowestPixVal;
     prevHighestPixVal = highestPixVal;
 
     return getBlobPosClosestToPoint(THRESHOLD_BUFFER_W / 2, THRESHOLD_BUFFER_H / 2);
 }
 
-float normalize(int number, int min, int max) {
-    if (min == max) {
+float normalize(int number, int min, int max)
+{
+    if (min == max)
+    {
         return 0.0;
     }
 
@@ -318,11 +322,16 @@ float normalize(int number, int min, int max) {
     float normalized = (2.0 * (number - min) / (max - min)) - 1.0;
 
     // Ensure the result is within the valid range [-1, 1]
-    if (normalized < -1.0) {
+    if (normalized < -1.0)
+    {
         return -1.0;
-    } else if (normalized > 1.0) {
+    }
+    else if (normalized > 1.0)
+    {
         return 1.0;
-    } else {
+    }
+    else
+    {
         return normalized;
     }
 }
@@ -353,7 +362,8 @@ vec2f normalizePupilCoords(vec2i pixelCoords, eyeCal calibration)
 }
 
 // For sending to VRC over OSC
-float normToEyeDeg(float norm) {
+float normToEyeDeg(float norm)
+{
     return norm * 16.0f;
 }
 
@@ -378,7 +388,10 @@ void trackEye()
         calibration.maxY = MAX(calibration.maxY, pupilPosPix.y);
     }
     Serial.printf("X:%.02f,Y:%.02f,ms:%d %d %d\n", pupilPosNorm.x, pupilPosNorm.y, timeAfter - timeBefore, timeAfterCapturePic - timeBeforeCapturePic, timeAfterFindPupil - timeBeforeFindPupil);
-    client.send("192.168.50.219", 9000, "/tracking/eye/LeftRightPitchYaw", normToEyeDeg(pupilPosNorm.y), normToEyeDeg(pupilPosNorm.x), normToEyeDeg(pupilPosNorm.y), normToEyeDeg(pupilPosNorm.x));
+    if (WIFI_ENABLE)
+    {
+        client.send("192.168.50.219", 9000, "/tracking/eye/LeftRightPitchYaw", normToEyeDeg(pupilPosNorm.y), normToEyeDeg(pupilPosNorm.x), normToEyeDeg(pupilPosNorm.y), normToEyeDeg(pupilPosNorm.x));
+    }
     if (!continuousTracking)
     {
         Serial.printf("Lowest: %u Highest: %u\n", prevLowestPixVal, prevHighestPixVal);
@@ -418,17 +431,21 @@ void setup()
     Serial.begin(115200);
     setupCam();
     analogWrite(flashPin, 1);
-    WiFi.mode(WIFI_STA);
-    Serial.print("Connecting to WiFi ..");
-
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED)
+    if (WIFI_ENABLE) 
     {
-        delay(10);
-    }
-    if (WiFi.waitForConnectResult() != WL_CONNECTED) {
-        Serial.println("WiFi Failed");
-        errorLoop();
+        WiFi.mode(WIFI_STA);
+        Serial.print("Connecting to WiFi ..");
+
+        WiFi.begin(ssid, password);
+        while (WiFi.status() != WL_CONNECTED)
+        {
+            delay(10);
+        }
+        if (WiFi.waitForConnectResult() != WL_CONNECTED)
+        {
+            Serial.println("WiFi Failed");
+            errorLoop();
+        }
     }
 }
 
@@ -456,7 +473,9 @@ void loop()
             {
                 calibrating = false;
                 Serial.printf("CAL DONE\nMIN/MAX_X:%d-%d\nMIN/MAX_Y:%d-%d\n", calibration.minX, calibration.maxX, calibration.minY, calibration.maxY);
-            } else {
+            }
+            else
+            {
                 calibrating = true;
                 calibration.minX = 47;
                 calibration.minY = 47;
@@ -479,7 +498,6 @@ void loop()
         default:
             break;
         }
-        
     }
     if (continuousTracking)
     {
